@@ -11,6 +11,8 @@
  *******************************************************************************/
 package org.eclipse.kapua.service.device.registry.event.internal;
 
+import javax.persistence.OptimisticLockException;
+
 import org.eclipse.kapua.KapuaEntityNotFoundException;
 import org.eclipse.kapua.KapuaException;
 import org.eclipse.kapua.commons.service.internal.AbstractKapuaService;
@@ -30,6 +32,8 @@ import org.eclipse.kapua.service.device.registry.event.DeviceEventCreator;
 import org.eclipse.kapua.service.device.registry.event.DeviceEventListResult;
 import org.eclipse.kapua.service.device.registry.event.DeviceEventService;
 import org.eclipse.kapua.service.device.registry.internal.DeviceEntityManagerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link DeviceEventService} implementation.
@@ -38,6 +42,11 @@ import org.eclipse.kapua.service.device.registry.internal.DeviceEntityManagerFac
  */
 @KapuaProvider
 public class DeviceEventServiceImpl extends AbstractKapuaService implements DeviceEventService {
+
+    private static final Logger logger = LoggerFactory.getLogger(DeviceEventServiceImpl.class);
+
+    private static final int MAX_ITERATION = 3;
+    private static final double MAX_WAIT = 200d;
 
     private final AuthorizationService authorizationService;
     private final PermissionFactory permissionFactory;
@@ -58,11 +67,6 @@ public class DeviceEventServiceImpl extends AbstractKapuaService implements Devi
 
     @Override
     public DeviceEvent create(DeviceEventCreator deviceEventCreator) throws KapuaException {
-        return create(deviceEventCreator, true);
-    }
-
-    @Override
-    public DeviceEvent create(DeviceEventCreator deviceEventCreator, boolean updateDeviceLastEventId) throws KapuaException {
         //
         // Argument Validation
         ArgumentValidator.notNull(deviceEventCreator, "deviceEventCreator");
@@ -81,16 +85,26 @@ public class DeviceEventServiceImpl extends AbstractKapuaService implements Devi
 
         // Create the event
         DeviceEvent deviceEvent = entityManagerSession.onTransactedInsert(entityManager -> DeviceEventDAO.create(entityManager, deviceEventCreator));
-
-        // Update last event id if necessary
-        if (updateDeviceLastEventId) {
-            Device device = deviceRegistryService.find(deviceEvent.getScopeId(), deviceEvent.getDeviceId());
-            if (device != null) {
-                device.setLastEventId(deviceEvent.getId());
-                deviceRegistryService.update(device);
+        int iteration = 0;
+        do {
+            try {
+                Device device = deviceRegistryService.find(deviceEvent.getScopeId(), deviceEvent.getDeviceId());
+                if (device != null) {
+                    device.setLastEventId(deviceEvent.getId());
+                    deviceRegistryService.update(device);
+                }
+                break;
+            }
+            catch (OptimisticLockException e) {
+                logger.warn("Concurrent update for device id {}... try again (if maximum attempts is not reach)", deviceEvent.getDeviceId());
+                try {
+                    Thread.sleep((long)(Math.random() * MAX_WAIT));
+                } catch (InterruptedException e1) {
+                    logger.warn("Error while waiting {}", e.getMessage(), e);
+                }
             }
         }
-
+        while(iteration++ < MAX_ITERATION);
         return deviceEvent;
     }
 
