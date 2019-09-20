@@ -666,23 +666,23 @@ public class KapuaSecurityBrokerFilter extends BrokerFilter {
         @SuppressWarnings("rawtypes")
         List<DestinationMapEntry> entries = new ArrayList<>();
         for (org.eclipse.kapua.broker.core.plugin.authentication.AuthorizationEntry entry : authorizationEntries) {
-            entries.add(createAuthorizationEntry(kcc, entry.getAcl(), entry.getAddress()));
+            entries.add(createAuthorizationEntry(kcc, entry.getAcl(), entry.getAddress(), ActiveMQDestination.TOPIC_TYPE));
             // added to support the vt topic name space for durable subscriptions
             if (entry.getAcl().isRead()) {
                 // logger.info("pattern {} - clientid {} - topic {} - evaluated {}", new Object[]{JmsConstants.ACL_VT_DURABLE_PREFIX[0], clientId, topic,
                 // MessageFormat.format(JmsConstants.ACL_VT_DURABLE_PREFIX[0], fullClientId, topic)});
-                entries.add(createAuthorizationEntry(kcc, entry.getAcl(), MessageFormat.format(VT_DURABLE_PREFIX.get(0), kcc.getFullClientId(), entry.getAddress())));
+                entries.add(createAuthorizationEntry(kcc, entry.getAcl(), MessageFormat.format(VT_DURABLE_PREFIX.get(0), kcc.getFullClientId(), entry.getAddress()), ActiveMQDestination.QUEUE_TYPE));
                 // logger.info("pattern {} - clientid {} - topic {} - evaluated {}", new Object[]{JmsConstants.ACL_VT_DURABLE_PREFIX[1], clientId, topic,
                 // MessageFormat.format(JmsConstants.ACL_VT_DURABLE_PREFIX[1], fullClientId, topic)});
-                entries.add(createAuthorizationEntry(kcc, entry.getAcl(), MessageFormat.format(VT_DURABLE_PREFIX.get(1), kcc.getFullClientId(), entry.getAddress())));
+                entries.add(createAuthorizationEntry(kcc, entry.getAcl(), MessageFormat.format(VT_DURABLE_PREFIX.get(1), kcc.getFullClientId(), entry.getAddress()), ActiveMQDestination.QUEUE_TYPE));
             }
         }
         return new DefaultAuthorizationMap(entries);
     }
 
-    protected AuthorizationEntry createAuthorizationEntry(KapuaConnectionContext kcc, Acl acl, String address) {
+    protected AuthorizationEntry createAuthorizationEntry(KapuaConnectionContext kcc, Acl acl, String address, byte destinationType) {
         AuthorizationEntry authorizationEntry = new AuthorizationEntry();
-        authorizationEntry.setDestination(ActiveMQDestination.createDestination(address, ActiveMQDestination.TOPIC_TYPE));
+        authorizationEntry.setDestination(ActiveMQDestination.createDestination(address, destinationType));
         Set<Object> writeACLs = new HashSet<>();
         Set<Object> readACLs = new HashSet<>();
         Set<Object> adminACLs = new HashSet<>();
